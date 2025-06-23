@@ -1,0 +1,17 @@
+{
+  "name": "postgres-activity-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "topics": "user-activity-topic",
+    "connection.url": "jdbc:postgresql://kafkaauthapi_2-postgres-1:5432/user_logs",
+    "connection.user": "postgres",
+    "connection.password": "postgres",
+    "insert.mode": "insert",
+    "auto.create": false,
+    "auto.evolve": true,
+    "table.name.format": "logs",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
+  }
+}
