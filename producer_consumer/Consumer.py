@@ -61,7 +61,7 @@ for message in consumer:
 cur.close()
 conn.close()
 """
-
+# -*- coding: utf-8 -*-
 import asyncio
 from aiokafka import AIOKafkaConsumer
 import asyncpg

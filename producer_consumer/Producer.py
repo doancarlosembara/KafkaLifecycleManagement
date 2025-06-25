@@ -33,6 +33,7 @@ print("✅ Log sent to Kafka")
 from fastapi import FastAPI, Request, Path
 from pydantic import BaseModel
 import httpx
+from fastapi.responses import JSONResponse
 import json
 from datetime import datetime
 import logging
@@ -43,13 +44,11 @@ from concurrent.futures import ThreadPoolExecutor
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# ✅ ThreadPool untuk Kafka
 executor = ThreadPoolExecutor(max_workers=1)
 
-# ✅ Inisialisasi Kafka producer
 def create_producer():
     return KafkaProducer(
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers='localhost:9092',  # ← gunakan hostname container Kafka
         value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8'),
         request_timeout_ms=3000,
         retries=0,
@@ -58,7 +57,6 @@ def create_producer():
 
 producer = create_producer()
 
-# ✅ Fungsi kirim ke Kafka
 async def send_to_kafka(data: dict):
     loop = asyncio.get_event_loop()
     try:
@@ -69,31 +67,35 @@ async def send_to_kafka(data: dict):
         logging.error(f"❌ Kafka send failed: {e}")
         return False
 
-# ✅ Endpoint fleksibel (GET, POST, PUT, PATCH, DELETE)
-@app.api_route("/send-log", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route("/send-log", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def send_log(request: Request):
-    url = 'https://reqres.in/api/users/2'
+    url = 'https://dev-1-aws.ciam.telkomsel.com/iam/v1/realms/tsel/authenticate?authIndexType=service&authIndexValue=phoneLogin'
     headers = {'Content-Type': 'application/json'}
     method = request.method
-    body = await request.body()
+    body = await request.body() if method in ["POST", "PUT", "PATCH"] else None
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=False) as client:
             response = await client.request(
                 method=method,
                 url=url,
                 headers=headers,
-                content=body if method in ["POST", "PUT", "PATCH"] else None
+                content=body
             )
     except Exception as e:
-        return {"error": f"❌ Request failed: {e}"}
+        return JSONResponse(status_code=500, content={"error": f"❌ Request failed: {e}"})
+
+    try:
+        response_body = response.json()
+    except Exception:
+        response_body = response.text
 
     log_data = {
         "timestamp": datetime.utcnow(),
         "method": method,
         "url": url,
         "status_code": response.status_code,
-        "response_body": response.json(),
+        "response_body": response_body,
         "headers": dict(response.request.headers),
         "params": dict(request.query_params),
         "body": body.decode() if body else None
@@ -103,14 +105,11 @@ async def send_log(request: Request):
     if success:
         return {"status": "success", "data": log_data}
     else:
-        return {"error": "❌ Kafka producer not available or send failed"}
-
-# ✅ Model untuk update user
+        return JSONResponse(status_code=500, content={"error": "❌ Kafka producer not available or send failed"})
 class UserUpdate(BaseModel):
     name: str
     job: str
 
-# ✅ Endpoint GET user by ID
 @app.get("/user/{user_id}")
 async def get_user(user_id: int = Path(..., description="ID user dari Reqres")):
     url = f'https://reqres.in/api/users/{user_id}'
@@ -125,7 +124,6 @@ async def get_user(user_id: int = Path(..., description="ID user dari Reqres")):
     except Exception as e:
         return {"error": f"❌ Failed to fetch user: {e}"}
 
-# ✅ Endpoint PUT update user & log ke Kafka
 @app.put("/user/{user_id}")
 async def update_user(user_id: int, payload: UserUpdate):
     url = f'https://reqres.in/api/users/{user_id}'
@@ -137,12 +135,17 @@ async def update_user(user_id: int, payload: UserUpdate):
     except Exception as e:
         return {"error": f"❌ Update failed: {e}"}
 
+    try:
+        response_body = response.json()
+    except Exception:
+        response_body = response.text
+
     log_data = {
         "timestamp": datetime.utcnow(),
         "method": "PUT",
         "url": url,
         "status_code": response.status_code,
-        "response_body": response.json(),
+        "response_body": response_body,
         "headers": dict(response.request.headers),
         "params": {},
         "body": json.dumps(payload.dict())
@@ -150,6 +153,6 @@ async def update_user(user_id: int, payload: UserUpdate):
 
     success = await send_to_kafka(log_data)
     if success:
-        return {"status": "success", "data": response.json()}
+        return {"status": "success", "data": response_body}
     else:
         return {"error": "❌ Kafka log failed"}
