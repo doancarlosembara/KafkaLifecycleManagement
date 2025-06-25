@@ -11,7 +11,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # 👉 Replace with actual bastion IP/domain
-BASTION_FLASK_API = "http://<bastion-ip>:5000/submit"
+BASTION_FLASK_API = "http://connect:5000/submit"
 
 # Send log to Bastion Flask Kafka Producer
 async def send_to_bastion(data: dict):
