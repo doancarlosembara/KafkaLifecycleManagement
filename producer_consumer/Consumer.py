@@ -1,66 +1,3 @@
-"""from kafka import KafkaConsumer
-import psycopg2
-import json
-
-# Kafka consumer config
-consumer = KafkaConsumer(
-    'user-activity-topic',
-    bootstrap_servers='localhost:9092',
-    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-    group_id='log-consumer-group',
-    auto_offset_reset='earliest'
-)
-
-# PostgreSQL connection
-conn = psycopg2.connect(
-    host='localhost',
-    port='5432',
-    dbname='user_logs',
-    user='postgres',
-    password='apollo12'
-)
-cur = conn.cursor()
-
-# Buat tabel kalau belum ada
-cur.execute('''
-    CREATE TABLE IF NOT EXISTS user_activity_logs (
-        id SERIAL PRIMARY KEY,
-        timestamp TIMESTAMP,
-        method TEXT,
-        url TEXT,
-        status_code INT,
-        response_body JSONB,
-        headers JSONB,
-        params JSONB,
-        body TEXT
-    );
-''')
-conn.commit()
-
-# Konsumsi dan simpan log ke database
-print("🔄 Menunggu log dari Kafka...")
-for message in consumer:
-    log = message.value
-    cur.execute('''
-        INSERT INTO user_activity_logs (timestamp, method, url, status_code, response_body, headers, params, body)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (
-        log.get("timestamp"),
-        log.get("method"),
-        log.get("url"),
-        log.get("status_code"),
-        json.dumps(log.get("response_body")),
-        json.dumps(log.get("headers")),
-        json.dumps(log.get("params")),
-        log.get("body")
-    ))
-    conn.commit()
-    print(f"✅ Log saved to DB: {log['url']}")
-
-# Cleanup
-cur.close()
-conn.close()
-"""
 # -*- coding: utf-8 -*-
 import asyncio
 from aiokafka import AIOKafkaConsumer
@@ -71,13 +8,13 @@ from asyncio_throttle import Throttler
 from datetime import datetime 
 
 
-# ✅ Logging
+# Logging
 logging.basicConfig(level=logging.INFO)
 
-# ✅ Throttler: 2 transaksi per detik
+# Throttler: 2 transaksi per detik
 throttler = Throttler(rate_limit=2, period=1)
 
-# ✅ Koneksi PostgreSQL (async)
+# Koneksi PostgreSQL (async)
 async def connect_postgres():
     while True:
         try:
@@ -101,31 +38,33 @@ async def connect_postgres():
                     body TEXT
                 );
             ''')
-            logging.info("✅ Connected to PostgreSQL and ensured table exists")
+            logging.info("Connected to PostgreSQL and ensured table exists")
             return conn
         except Exception as e:
-            logging.error(f"❌ PostgreSQL connection error: {e}")
+            logging.error(f"PostgreSQL connection error: {e}")
             await asyncio.sleep(5)
 
-# ✅ Kafka consumer setup (async)
+# Kafka consumer setup (async)
 async def start_consumer():
     while True:
         try:
+            loop = asyncio.get_event_loop()
             consumer = AIOKafkaConsumer(
                 'user-activity-topic',
                 bootstrap_servers='localhost:9092',
                 group_id='log-consumer-group',
                 auto_offset_reset='earliest',
-                value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                loop=loop  # ⬅️ Ini penting untuk aiokafka versi lama
             )
             await consumer.start()
-            logging.info("✅ Kafka consumer connected")
+            logging.info("Kafka consumer connected")
             return consumer
         except Exception as e:
-            logging.error(f"❌ Kafka connection failed: {e}")
+            logging.error(f"Kafka connection failed: {e}")
             await asyncio.sleep(5)
 
-# ✅ Main loop
+# Main loop
 async def main():
     conn = await connect_postgres()
     consumer = await start_consumer()
@@ -148,13 +87,13 @@ async def main():
                         json.dumps(log.get("params")),
                         log.get("body")
                     )
-                    logging.info(f"✅ Log saved: {log.get('url')}")
+                    logging.info(f"Log saved: {log.get('url')}")
                 except Exception as db_err:
-                    logging.error(f"❌ DB insert failed: {db_err}")
+                    logging.error(f"DB insert failed: {db_err}")
     finally:
         await consumer.stop()
         await conn.close()
 
-# ✅ Run
+# Run
 if __name__ == "__main__":
     asyncio.run(main())
