@@ -55,7 +55,7 @@ for message in consumer:
         log.get("body")
     ))
     conn.commit()
-    print(f"✅ Log saved to DB: {log['url']}")
+    print(f"Log saved to DB: {log['url']}")
 
 # Cleanup
 cur.close()
@@ -72,13 +72,13 @@ from asyncio_throttle import Throttler
 from datetime import datetime 
 
 
-# ✅ Logging
+# Logging
 logging.basicConfig(level=logging.INFO)
 
-# ✅ Throttler: 2 transaksi per detik
+# Throttler: 2 transaksi per detik
 throttler = Throttler(rate_limit=2, period=1)
 
-# ✅ Koneksi PostgreSQL (async)
+# Koneksi PostgreSQL (async)
 async def connect_postgres():
     while True:
         try:
@@ -102,13 +102,13 @@ async def connect_postgres():
                     body TEXT
                 );
             ''')
-            logging.info("✅ Connected to PostgreSQL and ensured table exists")
+            logging.info("Connected to PostgreSQL and ensured table exists")
             return conn
         except Exception as e:
-            logging.error(f"❌ PostgreSQL connection error: {e}")
+            logging.error(f"PostgreSQL connection error: {e}")
             await asyncio.sleep(5)
 
-# ✅ Kafka consumer setup (async)
+# Kafka consumer setup (async)
 async def start_consumer():
     while True:
         try:
@@ -120,13 +120,13 @@ async def start_consumer():
                 value_deserializer=lambda m: json.loads(m.decode('utf-8'))
             )
             await consumer.start()
-            logging.info("✅ Kafka consumer connected")
+            logging.info("Kafka consumer connected")
             return consumer
         except Exception as e:
-            logging.error(f"❌ Kafka connection failed: {e}")
+            logging.error(f"Kafka connection failed: {e}")
             await asyncio.sleep(5)
 
-# ✅ Main loop
+# Main loop
 async def main():
     conn = await connect_postgres()
     consumer = await start_consumer()
@@ -149,13 +149,13 @@ async def main():
                         json.dumps(log.get("params")),
                         log.get("body")
                     )
-                    logging.info(f"✅ Log saved: {log.get('url')}")
+                    logging.info(f"Log saved: {log.get('url')}")
                 except Exception as db_err:
-                    logging.error(f"❌ DB insert failed: {db_err}")
+                    logging.error(f"DB insert failed: {db_err}")
     finally:
         await consumer.stop()
         await conn.close()
 
-# ✅ Run
+# Run
 if __name__ == "__main__":
     asyncio.run(main())
