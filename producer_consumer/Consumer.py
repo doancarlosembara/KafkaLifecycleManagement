@@ -48,12 +48,14 @@ async def connect_postgres():
 async def start_consumer():
     while True:
         try:
+            loop = asyncio.get_event_loop()
             consumer = AIOKafkaConsumer(
                 'user-activity-topic',
                 bootstrap_servers='localhost:9092',
                 group_id='log-consumer-group',
                 auto_offset_reset='earliest',
-                value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                loop=loop  # ⬅️ Ini penting untuk aiokafka versi lama
             )
             await consumer.start()
             logging.info("Kafka consumer connected")
