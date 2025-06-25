@@ -1,35 +1,3 @@
-"""import requests
-from kafka import KafkaProducer
-import json
-from datetime import datetime
-
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
-
-url = 'https://reqres.in/api/users/2'
-headers = {
-    'Content-Type': 'application/json'
-}
-response = requests.get(url, headers=headers)
-
-log_data = {
-    "timestamp": datetime.utcnow().isoformat(),
-    "method": "GET",
-    "url": url,
-    "status_code": response.status_code,
-    "response_body": response.json(),
-    "headers": dict(response.request.headers),
-    "params": {},
-    "body": None
-}
-
-# Kirim ke Kafka
-producer.send("user-activity-topic", log_data)
-producer.flush()
-print("✅ Log sent to Kafka")
-"""
 from fastapi import FastAPI, Request, Path
 from pydantic import BaseModel
 import httpx
@@ -38,33 +6,26 @@ import json
 from datetime import datetime
 import logging
 import asyncio
-from kafka import KafkaProducer
-from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-executor = ThreadPoolExecutor(max_workers=1)
+# 👉 Replace with actual bastion IP/domain
+BASTION_FLASK_API = "http://<bastion-ip>:5000/submit"
 
-def create_producer():
-    return KafkaProducer(
-        bootstrap_servers='localhost:9092',  # ← gunakan hostname container Kafka
-        value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8'),
-        request_timeout_ms=3000,
-        retries=0,
-        max_block_ms=3000
-    )
-
-producer = create_producer()
-
-async def send_to_kafka(data: dict):
-    loop = asyncio.get_event_loop()
+# Send log to Bastion Flask Kafka Producer
+async def send_to_bastion(data: dict):
     try:
-        await loop.run_in_executor(executor, lambda: producer.send("user-activity-topic", data).get(timeout=3))
-        logging.info("✅ Log sent to Kafka")
-        return True
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.post(BASTION_FLASK_API, json=data)
+            if response.status_code == 200:
+                logging.info("✅ Log sent to Kafka via Bastion")
+                return True
+            else:
+                logging.error(f"❌ Bastion responded with error {response.status_code}: {response.text}")
+                return False
     except Exception as e:
-        logging.error(f"❌ Kafka send failed: {e}")
+        logging.error(f"❌ Failed to reach Bastion: {e}")
         return False
 
 @app.api_route("/send-log", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
@@ -101,11 +62,12 @@ async def send_log(request: Request):
         "body": body.decode() if body else None
     }
 
-    success = await send_to_kafka(log_data)
+    success = await send_to_bastion(log_data)
     if success:
         return {"status": "success", "data": log_data}
     else:
-        return JSONResponse(status_code=500, content={"error": "❌ Kafka producer not available or send failed"})
+        return JSONResponse(status_code=500, content={"error": "❌ Failed to forward log to Kafka"})
+
 class UserUpdate(BaseModel):
     name: str
     job: str
@@ -151,7 +113,7 @@ async def update_user(user_id: int, payload: UserUpdate):
         "body": json.dumps(payload.dict())
     }
 
-    success = await send_to_kafka(log_data)
+    success = await send_to_bastion(log_data)
     if success:
         return {"status": "success", "data": response_body}
     else:
