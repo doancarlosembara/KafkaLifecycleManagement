@@ -72,6 +72,17 @@ services:
       - kafka-network
     env_file: .env
 
+  fastapi:
+    build:
+      context: ./producer_consumer
+    container_name: fastapi
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
   connect:
     build:
       context: ./kafka-connect
