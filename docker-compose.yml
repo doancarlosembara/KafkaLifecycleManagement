@@ -6,7 +6,7 @@ services:
     image: confluentinc/cp-zookeeper:7.3.2
     hostname: zookeeper
     ports:
-      - "2181:2181"
+      - "22181:2181"
     environment:
       ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
       ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME}
